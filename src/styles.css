@@ -1,0 +1,320 @@
+@keyframes sweep {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background: #f0f4f8;
+    color: #333;
+    line-height: 1.6;
+}
+
+.device-discovery-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+/* 控制区域样式 */
+.control-area {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding: 1rem;
+    background-color: #1f2937;
+    border-radius: 0.5rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.scan-controls,
+.search-controls {
+    display: flex;
+    gap: 1rem;
+}
+
+.scan-range-select {
+    padding: 0.75rem;
+    /* font-size: 0.875rem;/ */
+    border: 1px solid #e5e7eb;
+    border-radius: 0.375rem;
+    background: #ef9957;
+}
+
+.scan-button {
+    padding: 0.75rem 1.5rem;
+    background: #0ea5e9;
+    color: white;
+    border: none;
+    border-radius: 0.375rem;
+    cursor: pointer;
+    transition: background 0.3s ease;
+}
+
+.scan-button.loading {
+    cursor: not-allowed;
+    background: #9ca3af;
+}
+
+.scan-button:hover {
+    background: #0c4a6e;
+}
+
+.search-input {
+    position: relative;
+}
+
+.search-box {
+    padding: 0.75rem;
+    width: 20rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.375rem;
+    background: #fff;
+}
+
+/* 雷达扫描动画样式 */
+.radar-container {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 2rem;
+}
+
+.radar {
+    width: 400px;
+    height: 400px;
+    border-radius: 50%;
+    background: radial-gradient(circle at center,
+            rgba(59, 130, 246, 0.1) 0%,
+            transparent 60%);
+    border: 2px solid rgba(59, 130, 246, 0.3);
+    position: relative;
+}
+
+.radar-sweep {
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(45deg,
+            rgba(59, 130, 246, 0) 50%,
+            rgba(59, 130, 246, 0.3) 100%);
+    position: absolute;
+    transform-origin: center;
+    animation: sweep 2s linear infinite;
+}
+
+.radar-blip {
+    width: 12px;
+    height: 12px;
+    background: #10B981;
+    border-radius: 50%;
+    position: absolute;
+    transform: translate(-50%, -50%);
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(0.8);
+        opacity: 0.6;
+    }
+
+    50% {
+        transform: scale(1.2);
+        opacity: 1;
+    }
+
+    100% {
+        transform: scale(0.8);
+        opacity: 0.6;
+    }
+}
+
+/* 设备列表样式 */
+.devices-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+}
+
+.device-card {
+    background: #7ebcec;
+    border-radius: 12px;
+    padding: 20px;
+    transition: all 0.3s ease;
+    overflow: hidden;
+    position: relative;
+}
+
+.device-card:hover {
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.device-card-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.device-info {
+    flex: 1;
+}
+
+.device-name {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0 0 8px;
+    display: flex;
+    align-items: center;
+}
+
+.status-indicator {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-left: 8px;
+}
+
+.device-details {
+    /* color: #898989; */
+    margin-bottom: 4px;
+}
+
+.device-address {
+    /* color: #898989; */
+    font-size: 14px;
+}
+
+.device-actions {
+    display: flex;
+    align-items: center;
+}
+
+.device-actions-menu {
+    display: none;
+}
+
+.device-card:hover .device-actions-menu {
+    display: flex;
+    gap: 8px;
+}
+
+.device-actions-menu button {
+    background: #1f2937;
+    color: #898989;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+}
+
+.device-actions-menu button:hover {
+    background: #333;
+    color: #fff;
+}
+
+.delete-button {
+    background: #f43f5e;
+    color: #fff;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    margin-left: 12px;
+    transition: all 0.3s ease;
+}
+
+.delete-button:hover {
+    background: #db2777;
+}
+
+.protocols-container {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.protocol-chip {
+    background: #333;
+    color: #898989;
+    padding: 4px 8px;
+    border-radius: 8px;
+    font-size: 12px;
+    transition: all 0.3s ease;
+}
+
+.protocol-chip.active {
+    background: #10B981;
+    color: #fff;
+    transform: scale(1.1);
+}
+
+.last-seen-info {
+    color: #6b7280;
+    font-size: 12px;
+    margin-top: 16px;
+}
+
+/* 空状态样式 */
+.no-devices-indicator {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 400px;
+    padding: 20px;
+}
+
+.no-devices-text {
+    font-size: 24px;
+    font-weight: 600;
+    color: #9ca3af;
+    margin-bottom: 20px;
+}
+
+.rescan-button {
+    background: linear-gradient(135deg, #10B981, #4f46e5);
+    color: #fff;
+    padding: 14px 35px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 16px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.rescan-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+/* 响应式样式 */
+@media (max-width: 768px) {
+    .control-area {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .scan-controls {
+        margin-bottom: 16px;
+    }
+
+    .search-input {
+        width: 100%;
+    }
+
+    .devices-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .no-devices-indicator {
+        height: auto;
+        padding: 20px;
+    }
+}

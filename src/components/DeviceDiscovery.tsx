@@ -1,187 +1,358 @@
-import React, { useState, useEffect } from 'react';
-import { RefreshCw, Plus, Search, Wifi, Radio, Zap } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { RefreshCw, Plus, Search } from 'lucide-react';
+import { v4 as uuidv4 } from 'uuid';
+
+// 类型定义
+type DeviceStatus = 'online' | 'offline' | 'configuring';
+type ProtocolType = 'mms' | 'goose' | 'sv';
 
 interface Device {
   id: string;
+  mac: string;
   name: string;
-  type: string;
-  status: 'online' | 'offline' | 'configuring';
+  manufacturer: string;
+  model: string;
+  type: 'IED' | 'RTU' | 'HMI' | 'Gateway';
+  status: DeviceStatus;
   ip: string;
-  lastSeen: string;
-  protocols: {
-    mms: boolean;
-    goose: boolean;
-    sv: boolean;
-  };
+  subnet: string;
+  lastSeen: Date;
+  protocols: Record<ProtocolType, boolean>;
 }
 
-export function DeviceDiscovery() {
-  const [isScanning, setIsScanning] = useState(false);
-  const [scanProgress, setScanProgress] = useState(0);
-  const [devices, setDevices] = useState<Device[]>([
-    {
-      id: '1',
-      name: 'IED_PROT_001',
-      type: 'Protection IED',
-      status: 'online',
-      ip: '192.168.1.100',
-      lastSeen: '2024-03-15 10:30:00',
-      protocols: { mms: true, goose: true, sv: false }
-    },
-    {
-      id: '2',
-      name: 'IED_CTRL_002',
-      type: 'Control IED',
-      status: 'online',
-      ip: '192.168.1.101',
-      lastSeen: '2024-03-15 10:29:55',
-      protocols: { mms: true, goose: false, sv: true }
-    }
-  ]);
+// 模拟设备服务
+const mockDeviceService = {
+  scanDevices: async (range: string): Promise<Device[]> => {
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    return [...baseDevices, ...(range === '局域网扫描' ? [randomDevice()] : [])];
+  },
 
-  const handleScan = () => {
-    setIsScanning(true);
-    setScanProgress(0);
+  deleteDevice: async (id: string): Promise<boolean> => {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    return true;
+  }
+};
+
+// 生成随机设备
+const randomDevice = (): Device => ({
+  id: uuidv4(),
+  mac: `00:1B:44:11:3A:${Math.floor(Math.random() * 90 + 10)}`,
+  name: `IED-${Math.random().toString(36).substr(2, 5).toUpperCase()}`,
+  manufacturer: ['Siemens', 'ABB', 'GE', 'Schneider'][Math.floor(Math.random() * 4)],
+  model: `VER${Math.floor(Math.random() * 5) + 1}.0`,
+  type: ['IED', 'RTU', 'HMI', 'Gateway'][Math.floor(Math.random() * 4)] as Device['type'],
+  status: Math.random() > 0.2 ? 'online' : 'offline',
+  ip: `192.168.1.${Math.floor(Math.random() * 200) + 50}`,
+  subnet: '255.255.255.0',
+  lastSeen: new Date(),
+  protocols: {
+    mms: Math.random() > 0.5,
+    goose: Math.random() > 0.5,
+    sv: Math.random() > 0.5
+  }
+});
+
+const baseDevices: Device[] = Array.from({ length: 3 }, randomDevice);
+
+export function DeviceDiscovery() {
+  // 状态管理
+  const [scanState, setScanState] = useState<'idle' | 'scanning' | 'success' | 'error'>('idle');
+  const [scanProgress, setScanProgress] = useState(0);
+  const [scanRange, setScanRange] = useState('局域网扫描');
+  const [devices, setDevices] = useState<Device[]>(baseDevices);
+  const [searchQuery, setSearchQuery] = useState('');
+  const scanTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scanAnimationFrame = useRef<number>();
+  const dialogRef = useRef<HTMLDialogElement>(null);
+
+  // 过滤后的设备列表
+  const filteredDevices = devices.filter(device =>
+    device.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    device.ip.includes(searchQuery)
+  );
+
+  // 扫描处理
+  const handleScan = useCallback(async () => {
+    try {
+      setScanState('scanning');
+      setScanProgress(0);
+
+      // 进度模拟
+      const progressInterval = setInterval(() => {
+        setScanProgress(prev => Math.min(prev + 2, 100));
+      }, 50);
+
+      // 执行扫描
+      const results = await mockDeviceService.scanDevices(scanRange);
+
+      clearInterval(progressInterval);
+      setScanProgress(100);
+      setScanState('success');
+
+      // 合并去重
+      setDevices(prev => [
+        ...prev,
+        ...results.filter(newDev =>
+          !prev.find(existingDev => existingDev.mac === newDev.mac)
+        )
+      ]);
+
+      // 自动重置状态
+      setTimeout(() => setScanState('idle'), 2000);
+    } catch (error) {
+      setScanState('error');
+      console.error('扫描失败:', error);
+    }
+  }, [scanRange]);
+
+  // 删除设备
+  const handleDelete = async (id: string) => {
+    if (!confirm('确定要删除该设备吗？')) return;
+    const success = await mockDeviceService.deleteDevice(id);
+    if (success) {
+      setDevices(prev => prev.filter(d => d.id !== id));
+    }
   };
 
+  // 扫描动画
+  const scanRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (isScanning) {
-      const interval = setInterval(() => {
-        setScanProgress(prev => {
-          if (prev >= 100) {
-            setIsScanning(false);
-            clearInterval(interval);
-            return 0;
-          }
-          return prev + 2;
-        });
-      }, 50);
-      return () => clearInterval(interval);
+    if (scanState === 'scanning' && scanRef.current) {
+      let rotation = 0;
+
+      const animate = () => {
+        if (!scanRef.current) return;
+        rotation = (rotation + 2) % 360;
+        scanRef.current.style.transform = `rotate(${rotation}deg)`;
+        scanAnimationFrame.current = requestAnimationFrame(animate);
+      };
+
+      animate();
+      return () => cancelAnimationFrame(scanAnimationFrame.current!);
     }
-  }, [isScanning]);
+  }, [scanState]);
 
   return (
-    <div className="space-y-6">
-      {/* Radar Scan Visualization */}
-      <div className="relative h-64 bg-gray-800 rounded-lg overflow-hidden">
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className={`w-64 h-64 rounded-full border-2 border-blue-400 relative ${
-            isScanning ? 'animate-pulse' : ''
-          }`}>
-            <div className={`absolute top-1/2 left-1/2 w-1 h-1/2 bg-blue-400 origin-bottom ${
-              isScanning ? 'animate-spin' : ''
-            }`} style={{ 
-              transform: 'translate(-50%, -100%) rotate(0deg)',
-              animationDuration: '2s' 
-            }}></div>
-            {devices.map((device, index) => (
-              <div
-                key={device.id}
-                className="absolute w-3 h-3 bg-green-400 rounded-full"
-                style={{
-                  left: `${50 + Math.cos(index * Math.PI / 3) * 40}%`,
-                  top: `${50 + Math.sin(index * Math.PI / 3) * 40}%`,
-                  transform: 'translate(-50%, -50%)'
-                }}
-              />
-            ))}
-          </div>
-        </div>
-        {isScanning && (
-          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 w-64">
-            <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-blue-400 transition-all duration-200"
-                style={{ width: `${scanProgress}%` }}
-              ></div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Actions */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <button
-            onClick={handleScan}
-            className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+    <div className="device-discovery-container">
+      {/* 控制区域 */}
+      <div className="control-area">
+        <div className="scan-controls">
+          <select
+            className="scan-range-select"
+            value={scanRange}
+            onChange={(e) => setScanRange(e.target.value)}
           >
-            <RefreshCw className={`h-4 w-4 mr-2 ${isScanning ? 'animate-spin' : ''}`} />
-            {isScanning ? '扫描中...' : '扫描设备'}
+            <option value="局域网扫描">局域网扫描</option>
+            <option value="特定 IP 范围">特定 IP 范围</option>
+            <option value="自定义 IP">自定义 IP</option>
+          </select>
+
+          <button
+            className={`scan-button ${scanState === 'scanning' ? 'loading' : ''}`}
+            onClick={handleScan}
+            disabled={scanState === 'scanning'}
+          >
+            <RefreshCw className="scan-icon" size={20} />
+            {scanState === 'scanning' ? `扫描中 (${scanProgress}%)` : '开始扫描'}
           </button>
-          <button className="flex items-center px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600">
-            <Plus className="h-4 w-4 mr-2" />
+        </div>
+
+        <div className="search-controls">
+          <button
+            className="add-device-button"
+            onClick={() => dialogRef.current?.showModal()}
+          >
+            <Plus className="plus-icon" size={16} />
             手动添加
           </button>
-        </div>
-        <div className="relative">
-          <input
-            type="text"
-            placeholder="搜索设备..."
-            className="pl-10 pr-4 py-2 bg-gray-800 border border-gray-700 rounded-md text-gray-100 placeholder-gray-400 focus:outline-none focus:border-blue-500"
-          />
-          <Search className="h-4 w-4 text-gray-400 absolute left-3 top-3" />
+
+          <div className="search-input">
+            <input
+              type="text"
+              placeholder="搜索设备..."
+              className="search-box"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            <button className="search-button">
+              <Search className="search-icon" size={20} />
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Device Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {devices.map((device) => (
-          <div key={device.id} className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <h3 className="text-lg font-medium text-gray-100">{device.name}</h3>
-                <p className="text-sm text-gray-400">{device.ip}</p>
-              </div>
-              <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                device.status === 'online' ? 'bg-green-100 text-green-800' :
-                device.status === 'offline' ? 'bg-red-100 text-red-800' :
-                'bg-yellow-100 text-yellow-800'
-              }`}>
-                {device.status}
-              </span>
-            </div>
-            
-            {/* Protocol Status */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <div className="flex items-center">
-                  <Wifi className={`h-4 w-4 mr-2 ${device.protocols.mms ? 'text-green-400' : 'text-gray-500'}`} />
-                  <span>MMS</span>
-                </div>
-                <span className={device.protocols.mms ? 'text-green-400' : 'text-gray-500'}>
-                  {device.protocols.mms ? '已连接' : '未连接'}
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <div className="flex items-center">
-                  <Radio className={`h-4 w-4 mr-2 ${device.protocols.goose ? 'text-green-400' : 'text-gray-500'}`} />
-                  <span>GOOSE</span>
-                </div>
-                <span className={device.protocols.goose ? 'text-green-400' : 'text-gray-500'}>
-                  {device.protocols.goose ? '已发布' : '未发布'}
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <div className="flex items-center">
-                  <Zap className={`h-4 w-4 mr-2 ${device.protocols.sv ? 'text-green-400' : 'text-gray-500'}`} />
-                  <span>SV</span>
-                </div>
-                <span className={device.protocols.sv ? 'text-green-400' : 'text-gray-500'}>
-                  {device.protocols.sv ? '已发布' : '未发布'}
-                </span>
-              </div>
-            </div>
+      {/* 状态指示 */}
+      <div className="radar-container">
+        <div className={`radar ${scanState === 'scanning' ? 'scanning' : ''}`}>
+          <div className="radar-sweep" ref={scanRef} />
+          {filteredDevices.map((device, i) => (
+            <div
+              key={device.id}
+              className="radar-blip"
+              style={{
+                '--angle': `${(i * 72) % 360}deg`,
+                '--distance': `${Math.min(80, i * 15)}%`
+              } as React.CSSProperties}
+            />
+          ))}
+        </div>
+      </div>
 
-            <div className="mt-4 pt-4 border-t border-gray-700">
-              <div className="flex justify-end space-x-3">
-                <button className="text-sm text-blue-400 hover:text-blue-300">配置</button>
-                <button className="text-sm text-red-400 hover:text-red-300">删除</button>
-              </div>
-            </div>
-          </div>
+      {/* 设备列表 */}
+      <div className="devices-grid">
+        {filteredDevices.map(device => (
+          <DeviceCard
+            key={device.id}
+            device={device}
+            onDelete={handleDelete}
+          />
         ))}
       </div>
+
+      {/* 空状态 */}
+      {filteredDevices.length === 0 && (
+        <div className="no-devices-indicator">
+          <div className="no-devices-text">未找到设备</div>
+          <button className="rescan-button" onClick={handleScan}>
+            <RefreshCw className="rescan-icon" size={26} />
+            重新扫描
+          </button>
+        </div>
+      )}
+
+      {/* 添加模态框 */}
+      <AddDeviceModal
+        ref={dialogRef}
+        onAdd={(newDev) => setDevices(prev => [...prev, newDev])}
+      />
     </div>
   );
 }
+
+// 设备卡片组件
+const DeviceCard = React.memo(({ device, onDelete }: {
+  device: Device;
+  onDelete: (id: string) => void;
+}) => {
+  const statusColor = {
+    online: '#10B981',
+    offline: '#f43f5e',
+    configuring: '#eab308'
+  }[device.status];
+
+  return (
+    <div className="device-card">
+      <div className="device-card-content">
+        <div className="device-info">
+          <h2 className="device-name">
+            {device.name}
+            <div className="status-indicator" style={{ backgroundColor: statusColor }}></div>
+          </h2>
+          <p className="device-details">
+            {device.manufacturer} {device.model}
+          </p>
+          <p className="device-address">
+            {device.ip} · {device.mac}
+          </p>
+        </div>
+        <div className="device-actions">
+          <div className="device-actions-menu">
+            <button>配置协议</button>
+            <button>查看日志</button>
+          </div>
+          <button className="delete-button" onClick={() => onDelete(device.id)}>
+            删除设备
+          </button>
+        </div>
+      </div>
+      {/* 协议状态 */}
+      <div className="protocols-container">
+        {Object.entries(device.protocols).map(([proto, active]) => (
+          <div
+            key={proto}
+            className={`protocol-chip ${active ? 'active' : ''}`}
+          >
+            {proto.toUpperCase()}
+          </div>
+        ))}
+      </div>
+      <div className="last-seen-info">
+        最后在线: {device.lastSeen.toLocaleString()}
+      </div>
+    </div>
+  );
+});
+
+// 添加设备模态框
+const AddDeviceModal = React.forwardRef<HTMLDialogElement, {
+  onAdd: (device: Device) => void
+}>(({ onAdd }, ref) => {
+  const [formData, setFormData] = useState({
+    ip: '',
+    mac: '',
+    name: ''
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onAdd({
+      ...randomDevice(),
+      ...formData,
+      id: uuidv4(),
+      status: 'configuring',
+      lastSeen: new Date()
+    });
+    (ref as React.MutableRefObject<HTMLDialogElement>).current?.close();
+  };
+
+  return (
+    <dialog ref={ref} className="add-device-modal">
+      <div className="modal-content">
+        <h3 className="modal-title">手动添加设备</h3>
+
+        <form className="add-device-form" onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label>设备名称</label>
+            <input
+              className="input-field"
+              type="text"
+              required
+              value={formData.name}
+              onChange={(e) => setFormData(p => ({ ...p, name: e.target.value }))}
+            />
+          </div>
+          <div className="form-group">
+            <label>IP 地址</label>
+            <input
+              className="input-field"
+              type="text"
+              pattern="\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}"
+              required
+              value={formData.ip}
+              onChange={(e) => setFormData(p => ({ ...p, ip: e.target.value }))}
+            />
+          </div>
+          <div className="form-group">
+            <label>MAC 地址</label>
+            <input
+              className="input-field"
+              type="text"
+              pattern="([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}"
+              required
+              value={formData.mac}
+              onChange={(e) => setFormData(p => ({ ...p, mac: e.target.value }))}
+            />
+          </div>
+          <div className="modal-actions">
+            <button className="cancel-button" type="button" onClick={() => (ref as React.MutableRefObject<HTMLDialogElement>).current?.close()}>
+              取消
+            </button>
+            <button className="submit-button" type="submit">
+              添加设备
+            </button>
+          </div>
+        </form>
+      </div>
+    </dialog>
+  );
+});
